@@ -1,0 +1,103 @@
+import time
+import re
+import paramiko
+
+def show_session(hostname, ip, user, passwd, vsys_list):
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(ip, 22, user, passwd, allow_agent=False, look_for_keys=False, timeout=60,
+                auth_timeout=35, banner_timeout=20)
+
+    channel = ssh.invoke_shell(width=256)
+    time.sleep(1)
+    channel.send("terminal line 0\n")
+    time.sleep(0.1)
+    for vsys_name in vsys_list:
+        now = time.strftime("%Y-%m-%d %H:%M:%S")
+        vsys_name_id = re.search(pattern=r"\d+", string=vsys_name).group()
+        channel.send(f"switch-vsys {vsys_name}\n")
+        time.sleep(0.1)
+
+        channel.send("show session list slot 5 ipv4 security-policy-name default_policytountrust\n")
+        time.sleep(10)
+        if channel.recv_ready():
+            recv_config = channel.recv(6553500).decode("utf-8", "ignore")
+            print(recv_config)
+            if "session: 0" not in recv_config and "Please" not in recv_config:
+                policy_name = f"{vsys_name}-ipv4-default_policytountrust"
+                recv_config = re.findall(r'Current total session: \d+([\S\s]*)?\r\n<', recv_config)[0]
+                lines_list = recv_config.split('\r\n')[1:]
+                result = ""
+                for line in lines_list:
+                    protocol = line.split()[0]
+                    if protocol != "ICMP":
+                        s_ip = re.findall(r'(\d+\.\d+\.\d+\.\d+):\d+-->', line.split()[1])[0]
+                        d_ip = re.findall(r'-->(\d+\.\d+\.\d+\.\d+):(\d+)', line.split()[1])[0][0]
+                        d_port = re.findall(r'-->(\d+\.\d+\.\d+\.\d+):(\d+)', line.split()[1])[0][1]
+                        result += f"{policy_name}\t{protocol}\t{s_ip}\t{d_ip}\t{d_port}\n"
+                    with open(f"./{hostname}/{hostname}-{vsys_name}.txt", "a") as f:
+                        f.write(result)
+
+        channel.send(f"show session list slot 5 ipv4 security-policy-name default_policyto{vsys_name_id}\n")
+        time.sleep(10)
+        if channel.recv_ready():
+            recv_config = channel.recv(6553500).decode("utf-8", "ignore")
+            print(recv_config)
+            if "session: 0" not in recv_config and "Please" not in recv_config:
+                policy_name = f"{vsys_name}-ipv4-default_policyto{vsys_name_id}"
+                recv_config = re.findall(r'Current total session: \d+([\S\s]*)?\r\n<', recv_config)[0]
+                lines_list = recv_config.split('\r\n')[1:]
+                result = ""
+                for line in lines_list:
+                    protocol = line.split()[0]
+                    if protocol != "ICMP":
+                        d_ip = re.findall(r'(\d+\.\d+\.\d+\.\d+):(\d+)+-->', line.split()[3])[0][0]
+                        d_port = re.findall(r'(\d+\.\d+\.\d+\.\d+):(\d+)+-->', line.split()[3])[0][1]
+                        s_ip = re.findall(r'-->(\d+\.\d+\.\d+\.\d+):\d+', line.split()[3])[0]
+                        result += f"{policy_name}\t{protocol}\t{s_ip}\t{d_ip}\t{d_port}\n"
+                    with open(f"./{hostname}/{hostname}-{vsys_name}.txt", "a") as f:
+                        f.write(result)
+
+        channel.send("show session list slot 5 ipv6 security-policy-name default_policytountrust\n")
+        time.sleep(10)
+        if channel.recv_ready():
+            recv_config = channel.recv(6553500).decode("utf-8", "ignore")
+            print(recv_config)
+            if "session: 0" not in recv_config and "Please" not in recv_config:
+                policy_name = f"{vsys_name}-ipv6-default_policytountrust"
+                recv_config = re.findall(r'Current total session: \d+([\S\s]*)?\r\n<', recv_config)[0]
+                lines_list = recv_config.split('\r\n')[1:]
+                result = ""
+                for line in lines_list:
+                    protocol = line.split()[0]
+                    if protocol != "ICMP":
+                        s_ip = re.findall(r'(\S+)?:\d+-->', line.split()[1])[0]
+                        d_ip = re.findall(r'-->(\S+):(\d+)', line.split()[1])[0][0]
+                        d_port = re.findall(r'-->(\S+):(\d+)', line.split()[1])[0][1]
+                        result += f"{policy_name}\t{protocol}\t{s_ip}\t{d_ip}\t{d_port}\n"
+                    with open(f"./{hostname}/{hostname}-{vsys_name}.txt", "a") as f:
+                        f.write(result)
+
+        channel.send(f"show session list slot 5 ipv6 security-policy-name default_policyto{vsys_name_id}\n")
+        time.sleep(10)
+        if channel.recv_ready():
+            recv_config = channel.recv(6553500).decode("utf-8", "ignore")
+            print(recv_config)
+            if "session: 0" not in recv_config and "Please" not in recv_config:
+                policy_name = f"{vsys_name}-ipv6-default_policyto{vsys_name_id}"
+                recv_config = re.findall(r'Current total session: \d+([\S\s]*)?\r\n<', recv_config)[0]
+                lines_list = recv_config.split('\r\n')[1:]
+                result = ""
+                for line in lines_list:
+                    protocol = line.split()[0]
+                    if protocol != "ICMP":
+                        s_ip = re.findall(r'(\S+)?:\d+-->', line.split()[1])[0]
+                        d_ip = re.findall(r'-->(\S+):(\d+)', line.split()[1])[0][0]
+                        d_port = re.findall(r'-->(\S+):(\d+)', line.split()[1])[0][1]
+                        result += f"{policy_name}\t{protocol}\t{s_ip}\t{d_ip}\t{d_port}\n"
+                    with open(f"./{hostname}/{hostname}-{vsys_name}.txt", "a") as f:
+                        f.write(result)
+
+        channel.send("exit\n")
+        time.sleep(0.1)
+    ssh.close()
